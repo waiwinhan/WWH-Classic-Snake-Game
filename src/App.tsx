@@ -7,14 +7,26 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Trophy, Play, RotateCcw, Pause, ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-const GRID_SIZE = 20;
-const INITIAL_SNAKE = [
-  { x: 10, y: 10 },
-  { x: 10, y: 11 },
-  { x: 10, y: 12 },
+type DifficultyLevel = 'easy' | 'medium' | 'hard';
+
+interface DifficultyConfig {
+  speed: number;
+  gridSize: number;
+}
+
+const DIFFICULTIES: Record<DifficultyLevel, DifficultyConfig> = {
+  easy: { speed: 200, gridSize: 15 },
+  medium: { speed: 150, gridSize: 20 },
+  hard: { speed: 100, gridSize: 25 },
+};
+
+const getInitialSnake = (gridSize: number) => [
+  { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2) },
+  { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2) + 1 },
+  { x: Math.floor(gridSize / 2), y: Math.floor(gridSize / 2) + 2 },
 ];
+
 const INITIAL_DIRECTION = { x: 0, y: -1 };
-const GAME_SPEED = 150;
 
 const playSound = (type: 'eat' | 'die') => {
   try {
@@ -54,7 +66,12 @@ type Point = { x: number; y: number };
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [snake, setSnake] = useState<Point[]>(INITIAL_SNAKE);
+  const [difficulty, setDifficulty] = useState<DifficultyLevel>('medium');
+  const config = DIFFICULTIES[difficulty];
+  const GRID_SIZE = config.gridSize;
+  const GAME_SPEED = config.speed;
+
+  const [snake, setSnake] = useState<Point[]>(getInitialSnake(GRID_SIZE));
   const [food, setFood] = useState<Point>({ x: 5, y: 5 });
   const [direction, setDirection] = useState<Point>(INITIAL_DIRECTION);
   const [isGameOver, setIsGameOver] = useState(false);
@@ -63,12 +80,12 @@ export default function App() {
   const [isPaused, setIsPaused] = useState(true);
   const [gameStarted, setGameStarted] = useState(false);
 
-  const generateFood = useCallback((currentSnake: Point[]) => {
+  const generateFood = useCallback((currentSnake: Point[], gridSize: number) => {
     let newFood: Point;
     while (true) {
       newFood = {
-        x: Math.floor(Math.random() * GRID_SIZE),
-        y: Math.floor(Math.random() * GRID_SIZE),
+        x: Math.floor(Math.random() * gridSize),
+        y: Math.floor(Math.random() * gridSize),
       };
       const isOnSnake = currentSnake.some(
         (segment) => segment.x === newFood.x && segment.y === newFood.y
@@ -79,13 +96,14 @@ export default function App() {
   }, []);
 
   const resetGame = () => {
-    setSnake(INITIAL_SNAKE);
+    const initialSnake = getInitialSnake(GRID_SIZE);
+    setSnake(initialSnake);
     setDirection(INITIAL_DIRECTION);
     setScore(0);
     setIsGameOver(false);
     setIsPaused(false);
     setGameStarted(true);
-    setFood(generateFood(INITIAL_SNAKE));
+    setFood(generateFood(initialSnake, GRID_SIZE));
   };
 
   const moveSnake = useCallback(() => {
@@ -115,14 +133,14 @@ export default function App() {
           if (newScore > highScore) setHighScore(newScore);
           return newScore;
         });
-        setFood(generateFood(newSnake));
+        setFood(generateFood(newSnake, GRID_SIZE));
       } else {
         newSnake.pop();
       }
 
       return newSnake;
     });
-  }, [direction, food, isPaused, isGameOver, gameStarted, generateFood, highScore]);
+  }, [direction, food, isPaused, isGameOver, gameStarted, generateFood, highScore, GRID_SIZE]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -285,40 +303,73 @@ export default function App() {
                   exit={{ opacity: 0 }}
                   className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center"
                 >
-                  {!gameStarted ? (
-                    <>
-                      <h2 className="text-2xl font-bold mb-4">Ready?</h2>
+                  {isGameOver ? (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ type: "spring", damping: 20, stiffness: 100 }}
+                      className="flex flex-col items-center"
+                    >
+                      <h2 className="text-4xl font-bold text-red-500 mb-2 tracking-tighter">Game Over</h2>
+                      <p className="text-zinc-400 mb-8 font-mono">Final Score: {score}</p>
                       <button
                         onClick={resetGame}
-                        className="group flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-6 py-3 rounded-full font-bold transition-all hover:scale-105 active:scale-95"
-                      >
-                        <Play className="w-5 h-5 fill-current" />
-                        Start Game
-                      </button>
-                    </>
-                  ) : isGameOver ? (
-                    <>
-                      <h2 className="text-3xl font-bold text-red-400 mb-2">Game Over</h2>
-                      <p className="text-zinc-400 mb-6">Final Score: {score}</p>
-                      <button
-                        onClick={resetGame}
-                        className="group flex items-center gap-2 bg-zinc-100 hover:bg-white text-zinc-950 px-6 py-3 rounded-full font-bold transition-all hover:scale-105 active:scale-95"
+                        className="group flex items-center gap-2 bg-zinc-100 hover:bg-white text-zinc-950 px-8 py-4 rounded-full font-bold transition-all hover:scale-105 active:scale-95 shadow-xl"
                       >
                         <RotateCcw className="w-5 h-5" />
                         Try Again
                       </button>
-                    </>
+                    </motion.div>
+                  ) : !gameStarted ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="flex flex-col items-center w-full"
+                    >
+                      <h2 className="text-2xl font-bold mb-4">Ready?</h2>
+                      
+                      <div className="flex flex-col gap-4 mb-8 w-full max-w-[240px]">
+                        <p className="text-[10px] text-zinc-500 uppercase font-bold tracking-widest">Select Difficulty</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(['easy', 'medium', 'hard'] as DifficultyLevel[]).map((level) => (
+                            <button
+                              key={level}
+                              onClick={() => setDifficulty(level)}
+                              className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                                difficulty === level
+                                  ? 'bg-emerald-500 border-emerald-400 text-zinc-950 shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                                  : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                              }`}
+                            >
+                              {level.toUpperCase()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={resetGame}
+                        className="group flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-8 py-4 rounded-full font-bold transition-all hover:scale-105 active:scale-95 shadow-lg shadow-emerald-500/20"
+                      >
+                        <Play className="w-5 h-5 fill-current" />
+                        Start Game
+                      </button>
+                    </motion.div>
                   ) : (
-                    <>
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center"
+                    >
                       <h2 className="text-2xl font-bold mb-6">Paused</h2>
                       <button
                         onClick={() => setIsPaused(false)}
-                        className="group flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-6 py-3 rounded-full font-bold transition-all hover:scale-105 active:scale-95"
+                        className="group flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 px-8 py-4 rounded-full font-bold transition-all hover:scale-105 active:scale-95"
                       >
                         <Play className="w-5 h-5 fill-current" />
                         Resume
                       </button>
-                    </>
+                    </motion.div>
                   )}
                 </motion.div>
               )}
@@ -347,31 +398,35 @@ export default function App() {
         {/* Mobile Controls (Visible only on small screens) */}
         <div className="mt-8 lg:hidden grid grid-cols-3 gap-2 max-w-[200px] mx-auto">
           <div />
-          <button 
-            className="p-4 bg-zinc-800 rounded-xl active:bg-zinc-700"
+          <motion.button 
+            whileTap={{ scale: 0.9, backgroundColor: "#27272a" }}
+            className="p-4 bg-zinc-800 rounded-xl border border-zinc-700/50 shadow-lg"
             onClick={() => direction.y === 0 && setDirection({ x: 0, y: -1 })}
           >
             <ChevronUp className="w-6 h-6 mx-auto" />
-          </button>
+          </motion.button>
           <div />
-          <button 
-            className="p-4 bg-zinc-800 rounded-xl active:bg-zinc-700"
+          <motion.button 
+            whileTap={{ scale: 0.9, backgroundColor: "#27272a" }}
+            className="p-4 bg-zinc-800 rounded-xl border border-zinc-700/50 shadow-lg"
             onClick={() => direction.x === 0 && setDirection({ x: -1, y: 0 })}
           >
             <ChevronLeft className="w-6 h-6 mx-auto" />
-          </button>
-          <button 
-            className="p-4 bg-zinc-800 rounded-xl active:bg-zinc-700"
+          </motion.button>
+          <motion.button 
+            whileTap={{ scale: 0.9, backgroundColor: "#27272a" }}
+            className="p-4 bg-zinc-800 rounded-xl border border-zinc-700/50 shadow-lg"
             onClick={() => direction.y === 0 && setDirection({ x: 0, y: 1 })}
           >
             <ChevronDown className="w-6 h-6 mx-auto" />
-          </button>
-          <button 
-            className="p-4 bg-zinc-800 rounded-xl active:bg-zinc-700"
+          </motion.button>
+          <motion.button 
+            whileTap={{ scale: 0.9, backgroundColor: "#27272a" }}
+            className="p-4 bg-zinc-800 rounded-xl border border-zinc-700/50 shadow-lg"
             onClick={() => direction.x === 0 && setDirection({ x: 1, y: 0 })}
           >
             <ChevronRight className="w-6 h-6 mx-auto" />
-          </button>
+          </motion.button>
         </div>
 
         <footer className="mt-12 text-center text-zinc-600 text-[10px] uppercase tracking-[0.2em]">
